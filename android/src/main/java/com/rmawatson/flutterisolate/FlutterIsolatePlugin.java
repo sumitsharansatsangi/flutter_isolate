@@ -11,13 +11,14 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 
 import io.flutter.FlutterInjector;
 import io.flutter.embedding.engine.FlutterEngine;
-import io.flutter.embedding.engine.dart.DartExecutor;
 import io.flutter.embedding.engine.FlutterEngineGroup;
+import io.flutter.embedding.engine.dart.DartExecutor;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
@@ -27,7 +28,6 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.view.FlutterCallbackInformation;
-import io.flutter.view.FlutterRunArguments;
 
 /**
  * FlutterIsolatePlugin
@@ -63,7 +63,6 @@ public class FlutterIsolatePlugin implements FlutterPlugin, MethodCallHandler, S
                     + ": " + noSuchMethodException.getMessage() + "\n" +
                     "The plugin registrant must provide a static registerWith(FlutterEngine) method";
             android.util.Log.e("FlutterIsolate", error);
-            return;
         } catch (InvocationTargetException invocationException) {
             Throwable target = invocationException.getTargetException();
             String error = target.getClass().getSimpleName() + ": " + target.getMessage() + "\n" +
@@ -74,7 +73,6 @@ public class FlutterIsolatePlugin implements FlutterPlugin, MethodCallHandler, S
                     "use a custom registrant for isolates, that only registers plugins that the isolate needs\n" +
                     "to use.";
             android.util.Log.e("FlutterIsolate", error);
-            return;
         } catch (Exception except) {
             android.util.Log.e("FlutterIsolate", except.getClass().getSimpleName() + " " + ((InvocationTargetException) except).getTargetException().getMessage());
         }
@@ -117,7 +115,7 @@ public class FlutterIsolatePlugin implements FlutterPlugin, MethodCallHandler, S
         IsolateHolder isolate = queuedIsolates.peek();
 
         FlutterInjector.instance().flutterLoader().ensureInitializationComplete(context, null);
-
+        if (isolate != null){
         FlutterCallbackInformation cbInfo = FlutterCallbackInformation.lookupCallbackInformation(isolate.entryPoint);
 
         isolate.engine = engineGroup.createAndRunEngine(context, new DartExecutor.DartEntrypoint(
@@ -136,10 +134,11 @@ public class FlutterIsolatePlugin implements FlutterPlugin, MethodCallHandler, S
             registerWithCustomRegistrant(isolate.engine);
         }
     }
+    }
 
     @Override
     public void onListen(Object o, EventChannel.EventSink sink) {
-        if (queuedIsolates.size() != 0) {
+        if (!queuedIsolates.isEmpty()) {
             IsolateHolder isolate = queuedIsolates.remove();
 
             sink.success(isolate.isolateId);
@@ -151,7 +150,7 @@ public class FlutterIsolatePlugin implements FlutterPlugin, MethodCallHandler, S
             isolate.result = null;
         }
 
-        if (queuedIsolates.size() != 0) {
+        if (!queuedIsolates.isEmpty()) {
             startNextIsolate();
         }
     }
@@ -162,50 +161,58 @@ public class FlutterIsolatePlugin implements FlutterPlugin, MethodCallHandler, S
 
     @Override
     public void onMethodCall(MethodCall call, @NonNull Result result) {
-        if (call.method.equals("spawn_isolate")) {
-            IsolateHolder isolate = new IsolateHolder();
-            final Object entryPoint = call.argument("entry_point");
-            if(entryPoint instanceof Long) {
-                isolate.entryPoint = (Long) entryPoint;
+        switch (call.method) {
+            case "spawn_isolate":
+                IsolateHolder isolate = new IsolateHolder();
+                final Object entryPoint = call.argument("entry_point");
+                if (entryPoint instanceof Long) {
+                    isolate.entryPoint = (Long) entryPoint;
+                }
+
+                if (entryPoint instanceof Integer) {
+                    isolate.entryPoint = Long.valueOf((Integer) entryPoint);
+                }
+                isolate.isolateId = call.argument("isolate_id");
+                isolate.result = result;
+
+                queuedIsolates.add(isolate);
+
+                if (queuedIsolates.size() == 1) { // no other pending isolate
+                    startNextIsolate();
+                }
+                break;
+            case "kill_isolate":
+                String isolateId = call.argument("isolate_id");
+
+                try {
+                    Objects.requireNonNull(activeIsolates.get(isolateId)).engine.destroy();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                activeIsolates.remove(isolateId);
+                result.success(true);
+                break;
+            case "get_isolate_list": {
+                final Set<String> runningIsolates = activeIsolates.keySet();
+                final List<String> outputList = new ArrayList<>(runningIsolates);
+
+                result.success(outputList);
+                break;
             }
+            case "kill_all_isolates": {
+                final Collection<IsolateHolder> runningIsolates = activeIsolates.values();
 
-            if(entryPoint instanceof Integer) {
-                isolate.entryPoint = Long.valueOf((Integer) entryPoint);
+                for (IsolateHolder holder : runningIsolates)
+                    holder.engine.destroy();
+
+                queuedIsolates.clear();
+                activeIsolates.clear();
+                result.success(true);
+                break;
             }
-            isolate.isolateId = call.argument("isolate_id");
-            isolate.result = result;
-
-            queuedIsolates.add(isolate);
-
-            if (queuedIsolates.size() == 1) { // no other pending isolate
-                startNextIsolate();
-            }
-        } else if (call.method.equals("kill_isolate")) {
-            String isolateId = call.argument("isolate_id");
-
-            try {
-                activeIsolates.get(isolateId).engine.destroy();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            activeIsolates.remove(isolateId);
-            result.success(true);
-        } else if (call.method.equals("get_isolate_list")) {
-            final Set<String> runningIsolates = activeIsolates.keySet();
-            final List<String> outputList = new ArrayList<>(runningIsolates);
-
-            result.success(outputList);
-        } else if (call.method.equals("kill_all_isolates")) {
-            final Collection<IsolateHolder> runningIsolates = activeIsolates.values();
-
-            for (IsolateHolder holder : runningIsolates)
-                holder.engine.destroy();
-
-            queuedIsolates.clear();
-            activeIsolates.clear();
-            result.success(true);
-        } else {
-            result.notImplemented();
+            default:
+                result.notImplemented();
+                break;
         }
     }
 }
