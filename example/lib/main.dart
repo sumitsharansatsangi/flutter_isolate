@@ -13,7 +13,7 @@ void isolate2(String arg) {
     await FlutterDownloader.initialize(debug: true);
     FlutterDownloader.registerCallback(AppWidget.downloaderCallback);
 
-    final taskId = await FlutterDownloader.enqueue(
+    await FlutterDownloader.enqueue(
         url:
             "https://raw.githubusercontent.com/rmawatson/flutter_isolate/master/README.md",
         savedDir: dir.path);
