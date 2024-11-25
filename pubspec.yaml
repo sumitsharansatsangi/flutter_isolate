@@ -4,8 +4,8 @@ version: 2.0.5-pre
 homepage: https://github.com/rmawatson/flutter_isolate
 
 environment:
-  sdk: ">=2.12.0 <4.0.0"
-  flutter: ">=1.12.13"
+  sdk: ">=3.2.0 <4.0.0"
+  flutter: ">=3.0.0"
 
 dependencies:
   flutter:
