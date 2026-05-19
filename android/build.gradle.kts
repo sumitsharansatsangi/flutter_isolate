@@ -2,27 +2,29 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.android")
+    kotlin("android")
 }
 
 group = "com.rmawatson.flutterisolate"
 version = "1.0-SNAPSHOT"
 
 repositories {
-        google()
-        mavenCentral()
-    }
+    google()
+    mavenCentral()
+}
 
 android {
     namespace = "com.rmawatson.flutterisolate"
-    
+
     compileSdk = 37
+
+    defaultConfig {
+        minSdk = 24
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
-    }
-    defaultConfig {
-        minSdk = 24
     }
 
     sourceSets {
@@ -33,7 +35,7 @@ android {
 }
 
 kotlin {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_21)
-        }
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_21)
     }
+}
